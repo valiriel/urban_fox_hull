@@ -3,6 +3,8 @@ library(elevatr); library(terra); library(wopr); library(osmdata); library(exact
 
 load("data/processed/0_gps_points.rda"); mapview(points)
 
+st_write(points, "data/processed/gps_points.shp")
+
 #'----------------------------------------
 #' * elevation *
 #' https://github.com/jhollist/elevatr
@@ -12,10 +14,6 @@ elevation <- get_elev_raster(points, z=9, src = "aws"); plot(elevation) # zoom a
 # correct crs
 points <- st_transform(points, crs=3857); crs <- st_crs(points); mapview(points)
 points$zone_id <- as.factor(points$zone_id)
-
-# Rainfall, temperature, elevation, soil quality/hydrology affects nest location, 
-# human density, greenspace density, imperviousness, road density, traffic density (car), 
-# amount of trash, land cover ratio, latitude, x/y coords, fox density
 
 #'----------------------------------------
 #' * climate * 
@@ -27,8 +25,7 @@ terra::crs(temperature)
 
 #'----------------------------------------
 #' * human density *
-#' https://data.humdata.org/dataset/united-kingdom-high-resolution-population-density-maps-demographic-estimates
-#' https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-density-adjusted-to-2015-unwpp-country-totals-rev11/data-download
+#' #' https://www.data.gov.uk/dataset/ca2daae8-8f36-4279-b15d-78b0463c61db/uk-gridded-population-2011-based-on-census-2011-and-land-cover-map-2015
 
 population <- terra::rast("data/raw/population_workday_census.tif"); plot(population)
 
@@ -43,8 +40,7 @@ greenspace <- read_sf("data/raw/greenspace_subset.shp")
 #' * land cover *
 #' 10m, 2020, CEH land cover raster
 
-lc <- terra::rast("Y:\\extra_data\\uk_2020_lc\\gb2020lcm10m.tif"); plot(lc)
-lc <- lc[[1]]
+lc <- terra::rast("Y:\\extra_data\\uk_2020_lc\\gb2020lcm10m.tif"); plot(lc); lc <- lc[[1]]
 
 #'----------------------------------------
 #' * road density *
@@ -74,14 +70,14 @@ for(b in buffer_sizes) {
   t <- st_intersection(data, greenspace) %>% 
     mutate(area=st_area(.)) %>% 
     group_by(zone_id) %>% summarise(green_area = as.numeric(sum(area))) %>% as_tibble %>% select(zone_id, green_area)
-  data <- left_join(data, t, by="zone_id")
+  data <- left_join(data, t, by="zone_id"); data$green_area[is.na(data$green_area)] <- 0
   data$green_density <- data$green_area/(b*b*3.14) # m^2/m^2
   
   # get road length and density
   t <- st_intersection(data, roads) %>% 
     mutate(value=st_length(.)) %>% 
     group_by(zone_id) %>% summarise(road_length = as.numeric(sum(value))) %>% as_tibble %>% select(zone_id, road_length) 
-  data <- left_join(data, t, by="zone_id")
+  data <- left_join(data, t, by="zone_id"); data$road_length[is.na(data$road_length)] <- 0
   data$road_density <- data$road_length/(b*b*3.14) # m/m^2
   
   # land cover extract
@@ -121,22 +117,10 @@ for(b in buffer_sizes) {
                                     # get Shannon entropy as effective number of species, q=1
                                     exp(-sum(ratio.vector * log(ratio.vector)))}))
   
+  data$rainfall[data$zone_id == "139"] <- 694.53; data$temperature[data$zone_id == "139"] <- 10.34
+  data$rainfall[data$zone_id == "43"] <- 642.42; data$rainfall[data$zone_id == "43"] <- 10.37
   
   save(data, file = paste0("data/processed/landscape_data_r", b, ".rda"))
- 
+  write_csv(data %>% st_drop_geometry(), file = paste0("data/processed/landscape_data_r", b, ".csv"))
+
 }
-
-
-load("data/processed/landscape_data_r100.rda")
-
-
-
-
-
-
-
-
-
-
-
-

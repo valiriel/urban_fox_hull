@@ -36,3 +36,7 @@ vignettes/*.pdf
 *.knit.md
 
 data/raw/gps_points.xlsx
+
+data/
+
+notes/
